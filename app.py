@@ -8,7 +8,7 @@ import time
 import numpy as np
 import json
 import logging
-from datetime import datetime, time
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -62,11 +62,12 @@ def calculate_rsi(data, periods=14):
 # Check if current time is within US market hours (9:30 AM - 4:00 PM ET, Mon-Fri)
 def is_market_open():
     now = datetime.now().astimezone(tz=None)
-    market_open = time(9, 30)
-    market_close = time(16, 0)
+    market_open = datetime.strptime("09:30", "%H:%M").time()
+    market_close = datetime.strptime("16:00", "%H:%M").time()
     return now.weekday() < 5 and market_open <= now.time() <= market_close
 
 # Fetch real-time stock data with retry logic and fallback
+@st.cache_data(ttl=30)
 def fetch_data(ticker, period, interval, retries=5):
     if not ticker:
         return pd.DataFrame(), "Please enter a valid ticker (e.g., AAPL, RELIANCE.NS)."
@@ -97,11 +98,11 @@ def fetch_data(ticker, period, interval, retries=5):
                 else:
                     logger.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}")
                     st.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}. Retrying...")
-                    time.sleep(20)  # Increased delay
+                    time.sleep(30)  # Increased delay
             except (json.JSONDecodeError, ValueError, Exception) as e:
                 logger.error(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}")
                 st.warning(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}. Retrying...")
-                time.sleep(20)
+                time.sleep(30)
         
         # Fallback to 5m for 1m failures on 1d/5d
         if interval == "1m" and period in ["1d", "5d"]:
@@ -114,6 +115,20 @@ def fetch_data(ticker, period, interval, retries=5):
                     return data, None
                 else:
                     logger.warning(f"No data for {ticker} with fallback interval 5m")
+            except Exception as e:
+                logger.error(f"Error fetching fallback data for {ticker}: {str(e)}")
+        
+        # Fallback to 15m for 5m failures on 1d/5d
+        if interval == "5m" and period in ["1d", "5d"]:
+            logger.info(f"Falling back to 15m interval for {ticker}")
+            st.info(f"No data for {ticker} with interval 5m. Trying 15m interval...")
+            try:
+                data = stock.history(period=period, interval="15m")
+                if not data.empty:
+                    logger.info(f"Successfully fetched fallback data for {ticker} with interval 15m")
+                    return data, None
+                else:
+                    logger.warning(f"No data for {ticker} with fallback interval 15m")
             except Exception as e:
                 logger.error(f"Error fetching fallback data for {ticker}: {str(e)}")
         
@@ -132,7 +147,7 @@ def fetch_data(ticker, period, interval, retries=5):
                 logger.error(f"Error fetching fallback data for {ticker}: {str(e)}")
         
         error_msg = (f"Failed to fetch data for {ticker} with interval {interval} after {retries} attempts. "
-                     "Try another ticker (e.g., AAPL, RELIANCE.NS), interval (e.g., 5m or 1h), or wait 10–15 minutes due to possible API issues.")
+                     "Try another ticker (e.g., AAPL, RELIANCE.NS), interval (e.g., 15m or 1h), check market hours, or wait 10–15 minutes due to possible API issues.")
         logger.error(error_msg)
         return pd.DataFrame(), error_msg
     except Exception as e:
@@ -152,7 +167,7 @@ with tab1:
         if error:
             st.error(error)
         elif data.empty:
-            st.error("No data fetched. Please check the ticker (e.g., AAPL, RELIANCE.NS), interval, or try again later.")
+            st.error("No data fetched. Please check the ticker (e.g., AAPL, RELIANCE.NS), interval, market hours, or try again later.")
         else:
             st.dataframe(data.tail())
 
