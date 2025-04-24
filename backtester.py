@@ -2,13 +2,12 @@ import pandas as pd
 import numpy as np
 from pattern_detector import detect_patterns
 
-def backtest_patterns(data, patterns):
+def backtest_patterns(data, patterns, look_forward=10):
     """
-    Backtests the reliability of detected patterns.
+    Backtests the reliability of detected patterns with adjustable look-forward period.
     Returns a dictionary with pattern statistics.
     """
     results = {}
-    look_forward = 10  # Periods to check post-pattern
     
     for pattern in patterns:
         stats = {"count": 0, "success_rate": 0.0, "avg_return": 0.0}
