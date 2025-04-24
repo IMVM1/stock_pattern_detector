@@ -29,8 +29,13 @@ ticker = custom_ticker if custom_ticker else ticker
 
 # Restrict intervals based on period
 period = st.sidebar.selectbox("Data Period", ["1d", "5d", "1mo", "3mo", "6mo"], index=1)
-interval_options = ["1m", "5m", "15m", "1h", "1d"] if period in ["1d", "5d"] else ["15m", "1h", "1d"]
-interval = st.sidebar.selectbox("Data Interval", interval_options, index=0)
+if period in ["1d", "5d"]:
+    interval_options = ["1m", "5m", "15m", "1h", "1d"]
+    default_interval = "1m" if period == "1d" else "5m"
+else:
+    interval_options = ["15m", "1h", "1d"]
+    default_interval = "1h"
+interval = st.sidebar.selectbox("Data Interval", interval_options, index=interval_options.index(default_interval))
 
 # Pattern detection sensitivity
 sensitivity = st.sidebar.slider("Pattern Detection Sensitivity", 0.5, 2.0, 1.0, 0.1, help="Higher values make detection stricter")
@@ -53,6 +58,18 @@ def calculate_rsi(data, periods=14):
 def fetch_data(ticker, period, interval, retries=5):
     if not ticker:
         return pd.DataFrame(), "Please enter a valid ticker (e.g., AAPL, RELIANCE.NS)."
+    
+    # Validate period/interval compatibility
+    valid_combinations = {
+        "1m": ["1d", "5d"],
+        "5m": ["1d", "5d", "1mo"],
+        "15m": ["1d", "5d", "1mo", "3mo", "6mo"],
+        "1h": ["1d", "5d", "1mo", "3mo", "6mo"],
+        "1d": ["1d", "5d", "1mo", "3mo", "6mo"]
+    }
+    if interval not in valid_combinations or period not in valid_combinations[interval]:
+        return pd.DataFrame(), f"Invalid interval {interval} for period {period}. Use 1m or 5m for 1d/5d, or 15m/1h for longer periods."
+
     try:
         stock = yf.Ticker(ticker)
         for attempt in range(retries):
@@ -62,11 +79,11 @@ def fetch_data(ticker, period, interval, retries=5):
                     return data, None
                 else:
                     st.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}. Retrying...")
-                    time.sleep(10)  # Increased delay to avoid rate limiting
+                    time.sleep(15)  # Increased delay to avoid rate limiting
             except (json.JSONDecodeError, ValueError, Exception) as e:
                 st.warning(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}. Retrying...")
-                time.sleep(10)
-        return pd.DataFrame(), f"Failed to fetch data for {ticker} after {retries} attempts. Try another ticker (e.g., TSLA, RELIANCE.NS), a different interval (e.g., 15m), or wait a few minutes due to possible API issues."
+                time.sleep(15)
+        return pd.DataFrame(), f"Failed to fetch data for {ticker} with interval {interval} after {retries} attempts. Try another ticker (e.g., AAPL, RELIANCE.NS), a different interval (e.g., 15m or 1h), or wait a few minutes due to possible API issues."
     except Exception as e:
         return pd.DataFrame(), f"Error fetching data for {ticker}: {str(e)}. Try a valid ticker (e.g., AAPL, RELIANCE.NS) or check your network connection."
 
