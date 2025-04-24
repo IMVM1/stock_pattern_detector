@@ -5,8 +5,7 @@ import plotly.graph_objects as go
 from pattern_detector import detect_patterns, get_pattern_description
 from backtester import backtest_patterns
 import time
-import talib
-import io
+import numpy as np
 
 # Streamlit page configuration
 st.set_page_config(page_title="Real-Time Chart Pattern Detector", layout="wide")
@@ -40,22 +39,38 @@ show_sma = st.sidebar.checkbox("Show Simple Moving Average (SMA)", value=True)
 show_ema = st.sidebar.checkbox("Show Exponential Moving Average (EMA)", value=False)
 show_rsi = st.sidebar.checkbox("Show Relative Strength Index (RSI)", value=False)
 
-# Fetch real-time stock data with retry logic
+# Custom RSI calculation
+def calculate_rsi(data, periods=14):
+    delta = data.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=periods).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=periods).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+# Fetch real-time stock data with retry logic and validation
 @st.cache_data(ttl=60)
 def fetch_data(ticker, period, interval, retries=3):
-    for attempt in range(retries):
-        try:
-            stock = yf.Ticker(ticker)
-            data = stock.history(period=period, interval=interval)
-            if not data.empty:
-                return data
-            else:
-                st.warning(f"Attempt {attempt + 1}: No data for {ticker}. Retrying...")
+    if not ticker:
+        return pd.DataFrame(), "Please enter a valid ticker."
+    try:
+        stock = y trama.Ticker(ticker)
+        info = stock.info
+        if not info.get("symbol"):
+            return pd.DataFrame(), f"Ticker {ticker} not found. Try AAPL, RELIANCE.NS, or another valid ticker."
+        for attempt in range(retries):
+            try:
+                data = stock.history(period=period, interval=interval)
+                if not data.empty:
+                    return data, None
+                else:
+                    st.warning(f"Attempt {attempt + 1}: No data for {ticker}. Retrying...")
+                    time.sleep(2)
+            except Exception as e:
+                st.warning(f"Attempt {attempt + 1}: Error fetching data: {str(e)}. Retrying...")
                 time.sleep(2)
-        except Exception as e:
-            st.warning(f"Attempt {attempt + 1}: Error fetching data: {str(e)}. Retrying...")
-            time.sleep(2)
-    return pd.DataFrame()
+        return pd.DataFrame(), f"Failed to fetch data for {ticker} after {retries} attempts. Check ticker or try later."
+    except Exception as e:
+        return pd.DataFrame(), f"Invalid ticker {ticker}: {str(e)}. Use a valid ticker like AAPL or RELIANCE.NS."
 
 # Tabs for different functionalities
 tab1, tab2, tab3 = st.tabs(["Live Data & Patterns", "Backtesting", "Technical Indicators"])
@@ -64,8 +79,10 @@ with tab1:
     st.subheader("Live Stock Data and Pattern Detection")
     if ticker:
         # Fetch data
-        data = fetch_data(ticker, period, interval)
-        if data.empty:
+        data, error = fetch_data(ticker, period, interval)
+        if error:
+            st.error(error)
+        elif data.empty:
             st.error("No data fetched. Please check the ticker (e.g., AAPL, RELIANCE.NS) or try again later.")
         else:
             st.dataframe(data.tail())
@@ -86,13 +103,13 @@ with tab1:
             
             # Add technical indicators
             if show_sma:
-                data['SMA'] = talib.SMA(data['Close'], timeperiod=20)
+                data['SMA'] = data['Close'].rolling(window=20).mean()
                 fig.add_trace(go.Scatter(x=data.index, y=data['SMA'], name="SMA", line=dict(color="blue")))
             if show_ema:
-                data['EMA'] = talib.EMA(data['Close'], timeperiod=20)
+                data['EMA'] = data['Close'].ewm(span=20, adjust=False).mean()
                 fig.add_trace(go.Scatter(x=data.index, y=data['EMA'], name="EMA", line=dict(color="purple")))
             if show_rsi:
-                data['RSI'] = talib.RSI(data['Close'], timeperiod=14)
+                data['RSI'] = calculate_rsi(data['Close'], periods=14)
                 fig.add_trace(go.Scatter(x=data.index, y=data['RSI'], name="RSI", line=dict(color="green"), yaxis="y2"))
 
             # Add pattern annotations
@@ -169,7 +186,7 @@ with tab3:
 if st.sidebar.checkbox("Enable Real-Time Updates", value=False):
     placeholder = st.empty()
     while True:
-        data = fetch_data(ticker, period, interval)
+        data, error = fetch_data(ticker, period, interval)
         if not data.empty:
             placeholder.dataframe(data.tail())
         time.sleep(60)  # Update every minute
