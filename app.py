@@ -24,8 +24,8 @@ interval = st.sidebar.selectbox("Data Interval", ["1m", "5m", "15m", "1h", "1d"]
 period = st.sidebar.selectbox("Data Period", ["1d", "5d", "1mo", "3mo", "6mo"], index=1)
 
 # Telegram configuration (hardcoded)
-TELEGRAM_BOT_TOKEN = "7424007039:AAG62YomUNo2ipomDJsUk-nlDCDEiky6IS0"
-TELEGRAM_CHAT_ID = "YOUR_NUMERIC_CHAT_ID"  # Replace with numeric chat ID (e.g., 123456789)
+TELEGRAM_BOT_TOKEN = "AAG62YomUNo2ipomDJsUk-nlDCDEiky6IS0"
+TELEGRAM_CHAT_ID = "7424007039"  # Replace with numeric chat ID (e.g., 123456789)
 
 # Fetch real-time stock data
 @st.cache_data(ttl=60)
