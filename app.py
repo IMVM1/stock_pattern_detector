@@ -48,21 +48,13 @@ def calculate_rsi(data, periods=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Fetch real-time stock data with retry logic and validation
+# Fetch real-time stock data with retry logic
 @st.cache_data(ttl=60)
-def fetch_data(ticker, period, interval, retries=3):
+def fetch_data(ticker, period, interval, retries=5):
     if not ticker:
         return pd.DataFrame(), "Please enter a valid ticker (e.g., AAPL, RELIANCE.NS)."
     try:
         stock = yf.Ticker(ticker)
-        # Lightweight check for ticker validity
-        try:
-            info = stock.info
-            if not info.get("symbol") or info.get("symbol") != ticker.split(".")[0]:
-                return pd.DataFrame(), f"Ticker {ticker} not found. Try AAPL, RELIANCE.NS, or another valid ticker."
-        except (json.JSONDecodeError, ValueError) as e:
-            return pd.DataFrame(), f"Error validating ticker {ticker}: {str(e)}. Try AAPL or RELIANCE.NS."
-        
         for attempt in range(retries):
             try:
                 data = stock.history(period=period, interval=interval)
@@ -70,14 +62,13 @@ def fetch_data(ticker, period, interval, retries=3):
                     return data, None
                 else:
                     st.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}. Retrying...")
-                    time.sleep(5)  # Increased delay to avoid rate limiting
+                    time.sleep(10)  # Increased delay to avoid rate limiting
             except (json.JSONDecodeError, ValueError, Exception) as e:
                 st.warning(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}. Retrying...")
-                time.sleep(5)
-        # Fallback suggestion
-        return pd.DataFrame(), f"Failed to fetch data for {ticker} after {retries} attempts. Try a different ticker (e.g., AAPL, RELIANCE.NS) or interval (e.g., 15m), or check your network connection."
+                time.sleep(10)
+        return pd.DataFrame(), f"Failed to fetch data for {ticker} after {retries} attempts. Try another ticker (e.g., TSLA, RELIANCE.NS), a different interval (e.g., 15m), or wait a few minutes due to possible API issues."
     except Exception as e:
-        return pd.DataFrame(), f"Error with ticker {ticker}: {str(e)}. Use a valid ticker like AAPL or RELIANCE.NS, or try again later."
+        return pd.DataFrame(), f"Error fetching data for {ticker}: {str(e)}. Try a valid ticker (e.g., AAPL, RELIANCE.NS) or check your network connection."
 
 # Tabs for different functionalities
 tab1, tab2, tab3 = st.tabs(["Live Data & Patterns", "Backtesting", "Technical Indicators"])
