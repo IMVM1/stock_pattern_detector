@@ -53,7 +53,7 @@ def fetch_data(ticker, period, interval, retries=3):
     if not ticker:
         return pd.DataFrame(), "Please enter a valid ticker."
     try:
-        stock = y trama.Ticker(ticker)
+        stock = yf.Ticker(ticker)
         info = stock.info
         if not info.get("symbol"):
             return pd.DataFrame(), f"Ticker {ticker} not found. Try AAPL, RELIANCE.NS, or another valid ticker."
