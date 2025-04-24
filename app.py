@@ -6,6 +6,7 @@ from pattern_detector import detect_patterns, get_pattern_description
 from backtester import backtest_patterns
 import time
 import numpy as np
+import json
 
 # Streamlit page configuration
 st.set_page_config(page_title="Real-Time Chart Pattern Detector", layout="wide")
@@ -51,26 +52,32 @@ def calculate_rsi(data, periods=14):
 @st.cache_data(ttl=60)
 def fetch_data(ticker, period, interval, retries=3):
     if not ticker:
-        return pd.DataFrame(), "Please enter a valid ticker."
+        return pd.DataFrame(), "Please enter a valid ticker (e.g., AAPL, RELIANCE.NS)."
     try:
         stock = yf.Ticker(ticker)
-        info = stock.info
-        if not info.get("symbol"):
-            return pd.DataFrame(), f"Ticker {ticker} not found. Try AAPL, RELIANCE.NS, or another valid ticker."
+        # Lightweight check for ticker validity
+        try:
+            info = stock.info
+            if not info.get("symbol") or info.get("symbol") != ticker.split(".")[0]:
+                return pd.DataFrame(), f"Ticker {ticker} not found. Try AAPL, RELIANCE.NS, or another valid ticker."
+        except (json.JSONDecodeError, ValueError) as e:
+            return pd.DataFrame(), f"Error validating ticker {ticker}: {str(e)}. Try AAPL or RELIANCE.NS."
+        
         for attempt in range(retries):
             try:
                 data = stock.history(period=period, interval=interval)
                 if not data.empty:
                     return data, None
                 else:
-                    st.warning(f"Attempt {attempt + 1}: No data for {ticker}. Retrying...")
-                    time.sleep(2)
-            except Exception as e:
-                st.warning(f"Attempt {attempt + 1}: Error fetching data: {str(e)}. Retrying...")
-                time.sleep(2)
-        return pd.DataFrame(), f"Failed to fetch data for {ticker} after {retries} attempts. Check ticker or try later."
+                    st.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}. Retrying...")
+                    time.sleep(5)  # Increased delay to avoid rate limiting
+            except (json.JSONDecodeError, ValueError, Exception) as e:
+                st.warning(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}. Retrying...")
+                time.sleep(5)
+        # Fallback suggestion
+        return pd.DataFrame(), f"Failed to fetch data for {ticker} after {retries} attempts. Try a different ticker (e.g., AAPL, RELIANCE.NS) or interval (e.g., 15m), or check your network connection."
     except Exception as e:
-        return pd.DataFrame(), f"Invalid ticker {ticker}: {str(e)}. Use a valid ticker like AAPL or RELIANCE.NS."
+        return pd.DataFrame(), f"Error with ticker {ticker}: {str(e)}. Use a valid ticker like AAPL or RELIANCE.NS, or try again later."
 
 # Tabs for different functionalities
 tab1, tab2, tab3 = st.tabs(["Live Data & Patterns", "Backtesting", "Technical Indicators"])
@@ -83,7 +90,7 @@ with tab1:
         if error:
             st.error(error)
         elif data.empty:
-            st.error("No data fetched. Please check the ticker (e.g., AAPL, RELIANCE.NS) or try again later.")
+            st.error("No data fetched. Please check the ticker (e.g., AAPL, RELIANCE.NS), interval, or try again later.")
         else:
             st.dataframe(data.tail())
 
