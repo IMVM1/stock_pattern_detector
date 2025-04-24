@@ -7,6 +7,11 @@ from backtester import backtest_patterns
 import time
 import numpy as np
 import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Streamlit page configuration
 st.set_page_config(page_title="Real-Time Chart Pattern Detector", layout="wide")
@@ -53,7 +58,7 @@ def calculate_rsi(data, periods=14):
     rs = gain / loss
     return 100 - (100 / (1 + rs))
 
-# Fetch real-time stock data with retry logic
+# Fetch real-time stock data with retry logic and fallback
 @st.cache_data(ttl=60)
 def fetch_data(ticker, period, interval, retries=5):
     if not ticker:
@@ -76,16 +81,39 @@ def fetch_data(ticker, period, interval, retries=5):
             try:
                 data = stock.history(period=period, interval=interval)
                 if not data.empty:
+                    logger.info(f"Successfully fetched data for {ticker} with interval {interval}")
                     return data, None
                 else:
+                    logger.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}")
                     st.warning(f"Attempt {attempt + 1}: No data for {ticker} with interval {interval}. Retrying...")
-                    time.sleep(15)  # Increased delay to avoid rate limiting
+                    time.sleep(15)
             except (json.JSONDecodeError, ValueError, Exception) as e:
+                logger.error(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}")
                 st.warning(f"Attempt {attempt + 1}: Error fetching data for {ticker}: {str(e)}. Retrying...")
                 time.sleep(15)
-        return pd.DataFrame(), f"Failed to fetch data for {ticker} with interval {interval} after {retries} attempts. Try another ticker (e.g., AAPL, RELIANCE.NS), a different interval (e.g., 15m or 1h), or wait a few minutes due to possible API issues."
+        
+        # Fallback to 1h interval if 15m fails
+        if interval == "15m" and period in ["1mo", "3mo", "6mo"]:
+            logger.info(f"Falling back to 1h interval for {ticker}")
+            st.info(f"No data for {ticker} with interval 15m. Trying 1h interval...")
+            try:
+                data = stock.history(period=period, interval="1h")
+                if not data.empty:
+                    logger.info(f"Successfully fetched fallback data for {ticker} with interval 1h")
+                    return data, None
+                else:
+                    logger.warning(f"No data for {ticker} with fallback interval 1h")
+            except Exception as e:
+                logger.error(f"Error fetching fallback data for {ticker}: {str(e)}")
+        
+        error_msg = (f"Failed to fetch data for {ticker} with interval {interval} after {retries} attempts. "
+                     "Try another ticker (e.g., AAPL, RELIANCE.NS), interval (e.g., 1h), or wait 10–15 minutes due to possible API issues.")
+        logger.error(error_msg)
+        return pd.DataFrame(), error_msg
     except Exception as e:
-        return pd.DataFrame(), f"Error fetching data for {ticker}: {str(e)}. Try a valid ticker (e.g., AAPL, RELIANCE.NS) or check your network connection."
+        error_msg = f"Error fetching data for {ticker}: {str(e)}. Try a valid ticker (e.g., AAPL, RELIANCE.NS) or check your network connection."
+        logger.error(error_msg)
+        return pd.DataFrame(), error_msg
 
 # Tabs for different functionalities
 tab1, tab2, tab3 = st.tabs(["Live Data & Patterns", "Backtesting", "Technical Indicators"])
@@ -197,7 +225,7 @@ with tab3:
         if show_rsi:
             st.write(f"Latest RSI: {data['RSI'].iloc[-1]:.2f}")
 
-# Real-time update loop
+# Real-time update loop (disabled by default)
 if st.sidebar.checkbox("Enable Real-Time Updates", value=False):
     placeholder = st.empty()
     while True:
