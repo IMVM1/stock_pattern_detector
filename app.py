@@ -32,7 +32,7 @@ custom_ticker = st.sidebar.text_input("Custom Ticker (if not in list)", value=""
 ticker = custom_ticker if custom_ticker else ticker
 
 # Alpha Vantage API key (hardcoded for testing)
-ALPHA_VANTAGE_KEY = "Y7VITAXN4E37H0L4"
+ALPHA_VANTAGE_KEY = "P1HAF0HQIWQJLUHM"
 
 # Restrict intervals based on period
 period = st.sidebar.selectbox("Data Period", ["1d", "5d", "1mo", "3mo", "6mo"], index=1, key="period_select")
